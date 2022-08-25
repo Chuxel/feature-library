@@ -1,0 +1,10 @@
+#!/bin/bash
+# Script to smoke test that the featue is installed correctly
+set -e
+node --version
+bash -ic 'nvm --version'
+yarn --version
+make --version
+gcc --version
+g++ --version
+python3 --version

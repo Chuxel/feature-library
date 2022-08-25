@@ -1,0 +1,146 @@
+#!/bin/bash
+set -e
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+FEATURE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+FEATURE_ID="$(basename "${FEATURE_PATH}")"
+
+DEFAULT_UTILS=("pylint" "flake8" "autopep8" "black" "yapf" "mypy" "pydocstyle" "pycodestyle" "bandit" "pipenv" "virtualenv")
+PYTHON_SOURCE_GPG_KEYS="64E628F8D684696D B26995E310250568 2D347EA6AA65421D FB9921286F5E1540 3A5CA953F73C700D 04C367C218ADD4FF 0EDDC5F26A45C816 6AF053F07D9DC8D2 C9BE28DEE6DF025C 126EB563A74B06BF D9866941EA5BBD71 ED9D77D5"
+GPG_KEY_SERVERS="keyserver hkp://keyserver.ubuntu.com:80
+keyserver hkps://keys.openpgp.org
+keyserver hkp://keyserver.pgp.com"
+
+# Import common utils
+. "${FEATURE_PATH}/../../common/utils.sh"
+
+download_from_actions() {
+    echo "Downloading pre-built Python ${python_version}..."
+    local filename="python-${python_version%-*}-linux-${VERSION_ID}-x64.tar.gz"
+    local dl_url="${repo_url}/releases/download/${python_version}/${filename}"
+    echo $filename
+    echo $dl_url
+    mkdir -p /tmp/python-dl/python "${target_path}"
+    cd /tmp/python-dl
+    curl -ssL ${dl_url} -o ${filename}
+    # TODO: Need SHA or some way to verify contents
+    tar -f "${filename}" -C "${target_path}" --no-same-owner -xz
+    cd ..
+    rm -rf python-dl
+
+    # Delete source code since we do not need it
+    rm -f "${target_path}/Python-${python_version%-*}.tgz"
+
+    export PATH="${target_path}/bin:${PATH}"
+    export LD_LIBRARY_PATH="${target_path}/lib:${LD_LIBRARY_PATH}"
+    export LD_INCLUDE_PATH="${target_path}/include:${LD_INCLUDE_PATH}"
+    ${target_path}/bin/python3 -m pip install --ignore-installed pip --disable-pip-version-check --no-warn-script-location
+}
+
+install_from_source() {
+    echo "Building Python ${python_version} from source..."
+
+    # Download tgz of source
+    mkdir -p /tmp/python-src "${target_path}"
+    cd /tmp/python-src
+    local tgz_filename="Python-${python_version}.tgz"
+    local tgz_url="https://www.python.org/ftp/python/${python_version}/${tgz_filename}"
+    echo "Downloading ${tgz_filename}..."
+    curl -sSL -o "/tmp/python-src/${tgz_filename}" "${tgz_url}"
+
+    # Verify signature
+    receive_gpg_keys PYTHON_SOURCE_GPG_KEYS
+    echo "Downloading ${tgz_filename}.asc..."
+    curl -sSL -o "/tmp/python-src/${tgz_filename}.asc" "${tgz_url}.asc"
+    cat /tmp/python-src/${tgz_filename}.asc
+    gpg --verify "${tgz_filename}.asc"
+
+    # Update min protocol for testing only - https://bugs.python.org/issue41561
+    cp /etc/ssl/openssl.cnf /tmp/python-src/
+    sed -i -E 's/MinProtocol[=\ ]+.*/MinProtocol = TLSv1.0/g' /tmp/python-src/openssl.cnf
+    export OPENSSL_CONF=/tmp/python-src/openssl.cnf
+
+    # Untar and build
+    tar -xzf "/tmp/python-src/${tgz_filename}" -C "/tmp/python-src" --strip-components=1
+    local config_args=""
+    if [ "${optimize}" = "true" ]; then
+        config_args="--enable-optimizations"
+    fi
+    ./configure --prefix="${target_path}" --with-ensurepip=install ${config_args}
+    make -j 8
+    make install
+    cd /tmp
+    rm -rf /tmp/python-src ${GNUPGHOME}
+}
+
+install_tools() {
+    # Install tools
+    echo "Installing Python tools..."
+    export PYTHONUSERBASE=/tmp/pip-tmp
+    export PIP_CACHE_DIR=/tmp/pip-tmp/cache
+    export PIPX_HOME="${target_path}/pipx"
+    export PIPX_BIN_DIR="${target_path}/bin"
+    pipx_path=""
+    if ! type pipx > /dev/null 2>&1; then
+        "${target_path}"/bin/pip3 install --disable-pip-version-check --no-cache-dir --user pipx 2>&1
+        /tmp/pip-tmp/bin/pipx install --pip-args=--no-cache-dir pipx
+        pipx_path="/tmp/pip-tmp/bin/"
+    fi
+    for util in ${DEFAULT_UTILS[@]}; do
+        if ! type ${util} > /dev/null 2>&1; then
+            ${pipx_path}pipx install --system-site-packages --pip-args '--no-cache-dir --force-reinstall' ${util}
+        else
+            echo "${util} already installed. Skipping."
+        fi
+    done
+    rm -rf /tmp/pip-tmp
+}
+
+# Get _BUILD_ARG_... variables
+detect_user username
+set_var_to_option_value "${FEATURE_ID}" build_mode build_mode "devcontainer"
+set_var_to_option_value "${FEATURE_ID}" profile_d profile_d "/usr/local/etc/dev-container-features/profile.d"
+set_var_to_option_value "${FEATURE_ID}" targetpath target_path "/usr/local"
+set_var_to_option_value "${FEATURE_ID}" version python_version "latest"
+set_var_to_option_value "${FEATURE_ID}" optimize optimize "true"
+set_var_to_option_value "${FEATURE_ID}" installtools install_tools "true"
+
+. /etc/os-release
+architecture="$(dpkg --print-architecture)"
+
+if [ "${architecture}" = "amd64" ] && [ "${ID}" = "ubuntu" ]; then
+    # Use the versions from GitHub Actions
+    repo_url="https://github.com/actions/python-versions"
+    find_version_from_git_tags python_version "${repo_url}" "tags/" "." "false" "-[0-9]+"
+    python_binary_source="actions"
+else
+    repo_url="https://github.com/python/cpython"
+    find_version_from_git_tags python_version "${repo_url}"
+    python_binary_source="source"
+fi
+
+# Skip if already run with same args - handle caching
+marker_path="${target_path}/etc/dev-container-features/marker/github.com/chuxel/devcontainer-features/${FEATURE_ID}-${SCRIPT_NAME}.marker"
+if ! check_marker "${marker_path}" "${target_path}" "${python_version}" "${optimize}" "${install_tools}" "${build_mode}"; then
+    echo "Python ${python_version} already installed. Skipping..."
+    exit 0
+fi
+
+if [ "${python_binary_source}" = "source" ]; then
+    install_from_source
+else 
+    download_from_actions
+fi
+
+symlink_if_ne ${target_path}/bin/python3 ${target_path}/bin/python
+symlink_if_ne ${target_path}/bin/pip3 ${target_path}/bin/pip
+symlink_if_ne ${target_path}/bin/idle3 ${target_path}/bin/idle
+symlink_if_ne ${target_path}/bin/pydoc3 ${target_path}/bin/pydoc
+symlink_if_ne ${target_path}/bin/python3-config ${target_path}/bin/python-config
+
+if [ "${build_mode}" = "devcontainer" ] && [ "${install_tools}" = "true" ]; then
+    install_tools
+fi
+
+rm -f /tmp/vscdc-settings.env
+
+update_marker "${marker_path}" "${target_path}" "${python_version}" "${optimize}" "${install_tools}" "${build_mode}"

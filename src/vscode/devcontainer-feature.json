@@ -1,0 +1,17 @@
+{
+    "id": "vscode",
+    "version": "0.0.1",
+    "name": "VS Code",
+    "options": {
+        "vscodeEdition": {
+            "type": "string",
+            "enum": [
+                "stable",
+                "insiders",
+                "both"
+            ],
+            "default": "stable",
+            "description": "Edition of VS Code to install"
+        }
+    }
+}

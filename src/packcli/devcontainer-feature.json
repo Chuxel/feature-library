@@ -1,0 +1,12 @@
+{
+    "id": "packcli",
+    "version": "0.0.1",
+    "name": "Cloud Native Buildpack CLI",
+    "options": {
+        "version": {
+            "type": "string",
+            "default": "latest",
+            "description": "Version of the pack CLI to install"
+        }
+    }
+}

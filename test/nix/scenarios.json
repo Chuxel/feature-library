@@ -1,0 +1,28 @@
+{
+    "1root-uid-update": {
+        "image": "base-root",
+        "features": {
+            "nix": {}
+        }
+    },
+    "1nonroot-uid-update": {
+        "image": "base-nonroot",
+        "features": {
+            "nix": {}
+        }
+    },
+    "1root-no-nonroot": {
+        "image": "ubuntu",
+        "features": {
+            "nix": {}
+        }
+    },
+    "install-packages": {
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+        "features": {
+            "nix": {
+                "packageList": "dotnet nodejs"
+            }
+        }
+    }
+}

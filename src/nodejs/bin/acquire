@@ -1,0 +1,163 @@
+#!/bin/bash
+set -e
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+FEATURE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+FEATURE_ID="$(basename "${FEATURE_PATH}")"
+
+NVM_VERSION="v0.39.1"
+NODE_GPG_KEYS="4ED778F539E3634C779C87C6D7062848A1AB005C 94AE36675C464D64BAFA68DD7434390BDBE9B9C5 74F12602B6F1C4E913FAA37AD3A89613643B6201 71DCFD284A79C3B38668286BC97EC7A07EDE3FC1 8FCCA13FEF1D0C2E91008E09770F7A9A5AE15600 C4F0DFFF4E8C1A8236409D08E73BC641CC11F4C8 C82FA3AE1CBEDC6BE46B9360C43CEC45C17AB93C DD8F2338BAE7501E3DD5AC78C273792F7D83545D A48C2BEE680E841632CD4E44F07496B3EB3C1762 108F52B48DB57BB0CC439B2997B01419BD92F80A B9E2F5981AA6E0CD28160D9FF13993A75599653C"
+YARN_GPG_KEY_URI="https://dl.yarnpkg.com/debian/pubkey.gpg"
+GPG_KEY_SERVERS="keyserver hkp://keyserver.ubuntu.com:80
+keyserver hkps://keys.openpgp.org
+keyserver hkp://keyserver.pgp.com"
+
+# Import common utils
+. "${FEATURE_PATH}/../../common/utils.sh"
+
+# Download from GitHub Actions
+download_from_actions() {
+    local filename="node-${node_version%-*}-linux-x64.tar.gz"
+    local dl_url="${repo_url}/releases/download/${node_version}/${filename}"
+    mkdir -p /tmp/actions-dl "${target_path}"
+    cd /tmp/actions-dl
+    curl -ssL ${dl_url} -o ${filename}
+    # TODO: Need SHA or some way to verify contents
+    tar -f "${filename}" -C "${target_path}" --no-same-owner -xz
+    cd ..
+    rm -rf actions-dl ${GNUPGHOME}
+}
+
+# Determine node version based on index file in Node.js download repo
+get_available_node_version() {
+    local requested_version="${node_version}"
+    local node_versions="$(curl -sSL https://nodejs.org/download/release/index.tab | grep -oE 'v[0-9].[0-9].[0-9]' | sort -rV)"
+    if [ "${node_version}" = "latest" ]; then
+        node_version="$(echo "${node_versions}" | head -n 1)"
+    else
+        local node_version_escaped="${node_version//./\\.}"
+        node_version="$(echo "${node_versions}" | grep -m 1 -E "^v${node_version_escaped}([\\.\\s]|$)")"
+    fi
+    if [ -z "${node_version}" ]; then
+        echo -e "Invalid Node.js version: ${requested_version}\nValid values:\n${node_versions}" >&2
+    fi
+}
+
+# Download directly from Node.js
+download_from_nodejs() {
+    local dl_arch="${architecture}"
+    if [ "${architecture}" = "amd64" ]; then
+        dl_arch="x64"
+    fi
+    local filename="node-${node_version}-linux-${dl_arch}.tar.gz"
+    local dl_url_prefix="https://nodejs.org/download/release/${node_version}"
+    mkdir -p /tmp/node-dl "${target_path}"
+    cd /tmp/node-dl
+
+    # Download binaries
+    curl -ssL "${dl_url_prefix}/${filename}" -o "${filename}"
+
+    # Also verify binaries - https://github.com/nodejs/node#verifying-binaries
+    curl -ssL "${dl_url_prefix}/SHASUMS256.txt" -o "SHASUMS256.txt"
+    curl -ssL "${dl_url_prefix}/SHASUMS256.txt.sig" -o "SHASUMS256.txt.sig"
+    receive_gpg_keys NODE_GPG_KEYS
+    gpg --verify SHASUMS256.txt.sig SHASUMS256.txt
+    grep "${filename}" SHASUMS256.txt | sha256sum -c -
+
+    # Untar in target path
+    tar -f "${filename}" -C "${target_path}" --no-same-owner -xz
+    cd ..
+    rm -rf /tmp/node-dl ${GNUPGHOME}
+}
+
+install_yarn() {
+    export GNUPGHOME="/tmp/tmp-gnupg"
+    mkdir -p ${GNUPGHOME} /tmp/yarn-dl
+    cd /tmp/yarn-dl
+    chmod 700 ${GNUPGHOME}
+    echo -e "disable-ipv6\n${GPG_KEY_SERVERS}" > ${GNUPGHOME}/dirmngr.conf
+    get_common_setting YARN_GPG_KEY_URI
+
+    # Download yarn tgz
+    local filename="latest.tar.gz"
+    curl -sSL "https://yarnpkg.com/${filename}" -o "${filename}"
+
+    # Verify signature - https://classic.yarnpkg.com/lang/en/docs/install/#alternatives-stable
+    curl -sSL -o gpg_key "${YARN_GPG_KEY_URI}"
+    gpg -q --import gpg_key
+    curl -sSL "https://yarnpkg.com/${filename}.asc" -o "${filename}.asc"
+    gpg --verify "${filename}.asc"
+
+    # Install
+    tar -f ${filename} --no-same-owner -xz
+    mv -f yarn-* ${target_path}/yarn
+    ln -fs "${target_path}/yarn/bin/yarn" "${target_path}/bin/yarn"
+    ln -fs "${target_path}/yarn/bin/yarnpkg" "${target_path}/bin/yarnpkg"
+    rm -rf /tmp/yarn-dl ${GNUPGHOME}
+}
+
+# Use git to install Nvm (given this is safer than alternatives)
+install_nvm() {
+    nvm_dir="${target_path}"/nvm
+    if [ -e "${nvm_dir}" ]; then
+        rm -rf "${nvm_dir}"
+    fi
+    git clone --depth=1 \
+        -c core.eol=lf \
+        -c core.autocrlf=false \
+        -c fsck.zeroPaddedFilemode=ignore \
+        -c fetch.fsck.zeroPaddedFilemode=ignore \
+        -c receive.fsck.zeroPaddedFilemode=ignore \
+        -c advice.detachedHead=false \
+        -b "${NVM_VERSION}" \
+        "https://github.com/nvm-sh/nvm" "${nvm_dir}" 2>&1
+    . "${nvm_dir}"/nvm.sh
+    nvm clear-cache
+
+    # NOTE: Since adding something to profile.d or exec.d only results
+    # in environment variables being set for a process, it won't work
+    # for nvm (we have to actually source it for it to work). In additon
+    # you can't just add to the user or OS's rc/profile files from this
+    # stage. So we'll add this particular bit in the "configure" script.
+}
+
+# Get _BUILD_ARG_... variables
+detect_user username
+set_var_to_option_value "${FEATURE_ID}" buildmode build_mode "devcontainer"
+set_var_to_option_value "${FEATURE_ID}" profile_d profile_d "/usr/local/etc/dev-container-features/profile.d"
+set_var_to_option_value "${FEATURE_ID}" targetpath target_path "/usr/local"
+set_var_to_option_value "${FEATURE_ID}" version node_version "latest"
+set_var_to_option_value "${FEATURE_ID}" installtools install_tools "true"
+
+. /etc/os-release
+architecture="$(dpkg --print-architecture)"
+
+if [ "${architecture}" = "amd64" ]; then
+    # Use the versions from GitHub Actions
+    repo_url="https://github.com/actions/node-versions"
+    find_version_from_git_tags node_version "${repo_url}" "tags/" "." "false" "-[0-9]+"
+    binary_source="actions"
+else
+    get_available_node_version
+    binary_source="nodejs"
+fi
+
+# Skip if already run with same args - handle caching
+marker_path="${target_path}/etc/dev-container-features/markers/github.com/chuxel/devcontainer-features/${FEATURE_ID}-${SCRIPT_NAME}.marker"
+if ! check_marker "${marker_path}" "${target_path}" "${node_version}" "${install_tools}" "${build_mode}"; then
+    echo "Node ${node_version} already installed. Skipping..."
+    exit 0
+fi
+
+echo "Downloading Node.js ${node_version}..."
+if [ "${binary_source}" = "nodejs" ]; then
+    download_from_nodejs
+else 
+    download_from_actions
+fi
+
+if [ "${build_mode}" = "devcontainer" ] && [ "${install_tools}" = "true" ]; then
+    install_nvm
+    install_yarn
+fi
+
+update_marker "${marker_path}" "${target_path}" "${node_version}" "${install_tools}" "${build_mode}"

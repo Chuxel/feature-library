@@ -1,0 +1,22 @@
+{
+    "id": "nix",
+    "version": "0.0.1",
+    "name": "Nix Package Manager",
+    "options": {
+        "version": {
+            "type": "string",
+            "proposals": ["latest"],
+            "default": "latest",
+            "description": "Version of Nix to install."
+        },
+        "packageList": {
+            "type": "string",
+            "default": "",
+            "description": "Optional space separated list of packages to install."
+        }
+    },
+    "containerEnv": {
+        "PATH": "/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:${PATH}"
+    },
+    "entrypoint": "/usr/local/share/nix-init.sh"
+}
