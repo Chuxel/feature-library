@@ -21,7 +21,7 @@ check_packages() {
 # If in automatic mode, determine if a user already exists, if not use root
 detect_user() {
     local user_variable_name=${1:-username}
-    local possible_users=${2:-("vscode" "node" "codespace" "$(awk -v val=1000 -F ":" '$3==val{print $1}' /etc/passwd)")}
+    local possible_users=("vscode" "node" "codespace" "$(awk -v val=1000 -F ":" '$3==val{print $1}' /etc/passwd)")
     if [ "${!user_variable_name}" = "auto" ] || [ "${!user_variable_name}" = "automatic" ]; then
         declare -g ${user_variable_name}=""
         for current_user in ${possible_users[@]}; do
@@ -193,42 +193,6 @@ update_marker() {
     echo "$(echo "$@")" > "${marker_path}"
 }
 
-# Checks if a marker file exists with the correct contents
-# check_automatic_marker <feature id> <target path>
-check_automatic_marker() {
-    local feature_id="$1"
-    local target_path="${2:-/usr/local}"
-    local marker_path="${target_path}/etc/dev-container-features/${feature_id}.marker"
-    get_automatic_marker_contents "$@"
-    local verifier_string="${__retval}"
-    unset __retval
-    if [ -e "${marker_path}" ] && [ "${verifier_string}" = "$(cat ${marker_path})" ]; then
-        return 1
-    else 
-        return 0
-    fi
-}
-
-
-# Updates marker for future checking using automatic logic
-# update_marker <feature id> <target path> [optional additional verifiers...]
-update_automatic_marker() {
-    local feature_id="$1"
-    local target_path="${2:-/usr/local}"
-    local marker_path="${target_path}/etc/dev-container-features/${feature_id}.marker"
-    mkdir -p "${target_path}/etc/dev-container-features"
-    get_automatic_marker_contents "$@" 
-    echo "${__retval}" > "${marker_path}"
-    unset __retval
-}
-
-# Marker generator
-# get_marker_text <feature id> [optional additional verifiers...]
-get_automatic_marker_contents() {
-    get_buld_arg_env_var_name "$1"
-    local marker_text="$@\n$(declare -x | grep -E "^declare -x ${__retval}_")"
-    __retval="$(echo "${marker_text}" | sha256sum | cut -d ' ' -f 1)"
-}
 
 # Checks if command exists, installs it if not
 # check_command <command> <package to install>...
@@ -240,40 +204,6 @@ check_command() {
     fi
     apt_get_update_if_needed
     apt-get -y install --no-install-recommends "$@"
-}
-
-# Converts arguments into expected format for build args and updates a variable called "__retval" with the result
-get_buld_arg_env_var_name() {
-    local var_name="_BUILD_ARG"
-    while [ "$1" != "" ]; do
-        var_name="${var_name}_$(echo "$1" | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
-        shift
-    done
-    __retval="${var_name}"
-}
-
-# set_var_to_option_value <feature id> <option name> <variable name> <default value>
-set_var_to_option_value() {
-    get_buld_arg_env_var_name "$1" "$2"
-    echo "$3=${!__retval:-"$4"}"
-    declare -g $3="${!__retval:-"$4"}"
-}
-
-# set_option_value <feature id> <option name> <value>
-set_option_value() {
-    get_buld_arg_env_var_name "$1" "$2"
-    echo "${__retval}=$3"
-    declare -g -x ${__retval}="$3"
-}
-
-# copy_option_value <feature id> <option name> <option name> <default value>
-copy_option_value() {
-    get_buld_arg_env_var_name "$1" "$2"
-    in_option_value="${!__retval:-"$4"}"
-    get_buld_arg_env_var_name "$1" "$3"
-    out_option_var_name="${__retval}"
-    echo "${out_option_var_name}=${in_option_value}"
-    declare -g -x ${out_option_var_name}="${in_option_value}"
 }
 
 # run_if_exists <command> <command arguments>...
@@ -297,5 +227,16 @@ run_as_user_if_exists() {
 symlink_if_ne() {
     if [ ! -e "$2" ]; then
         ln -s "$1" "$2"
+    fi
+}
+
+# Update a rc/profile file if it exists and string is not already present
+update_rc_file() {
+    # see if folder containing file exists
+    local rc_file_folder="$(dirname "$1")"
+    if [ ! -d "${rc_file_folder}" ]; then
+        echo "${rc_file_folder} does not exist. Skipping update of $1."
+    elif [ ! -e "$1" ] || [[ "$(cat "$1")" != *"$2"* ]]; then
+        echo "$2" >> "$1"
     fi
 }

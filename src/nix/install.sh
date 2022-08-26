@@ -62,11 +62,7 @@ su ${USERNAME} -c "$(cat << EOF
 
     . /home/${USERNAME}/.nix-profile/etc/profile.d/nix.sh
     if [ ! -z "${PACKAGELIST}" ] && [ "${PACKAGELIST}" != "none" ]; then
-    echo "~${PACKAGELIST}~"
-        packages=( ${PACKAGELIST} )
-        for package in ${packages[@]}; do
-            nix-env --install "${package}"
-        done
+        nix-env --install "${PACKAGELIST}"
     fi
     nix-collect-garbage --delete-old
     nix-store --optimise
