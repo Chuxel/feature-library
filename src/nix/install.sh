@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+VERSION="${VERSION:-"latest"}"
 USERNAME="${USERNAME:-"automatic"}"
 NIX_GPG_KEYS="B541D55301270E0BCF15CA5D8170B4726D7198DE"
 GPG_KEY_SERVERS="keyserver hkp://keyserver.ubuntu.com:80
@@ -47,7 +48,7 @@ usermod -g nixusers "${USERNAME}"
 # Adapted from https://nixos.org/download.html#nix-verify-installation
 orig_cwd="$(pwd)"
 mkdir -p /nix /tmp/nix
-chown "${USERNAME}:nixusers" /nix
+chown ${USERNAME} /nix
 cd /tmp/nix
 receive_gpg_keys NIX_GPG_KEYS
 curl -sSLf -o ./install-nix https://releases.nixos.org/nix/nix-${VERSION}/install
@@ -61,13 +62,14 @@ su ${USERNAME} -c "$(cat << EOF
     ln -s /nix/var/nix/profiles/per-user/${USERNAME}/profile /nix/var/nix/profiles/default
 
     . /home/${USERNAME}/.nix-profile/etc/profile.d/nix.sh
-    if [ ! -z "${PACKAGELIST}" ] && [ "${PACKAGELIST}" != "none" ]; then
-        nix-env --install "${PACKAGELIST}"
+    if [ ! -z "${PACKAGES}" ] && [ "${PACKAGES}" != "none" ]; then
+        nix-env --install ${PACKAGES//,/ }
     fi
     nix-collect-garbage --delete-old
     nix-store --optimise
 EOF
 )"
+chown "${USERNAME}:nixusers" /nix
 rm -rf /tmp/nix
 # Restore default group we used to install 
 usermod -a -G nixusers -g "${original_group}" "${USERNAME}"
@@ -97,7 +99,7 @@ cp  /home/${USERNAME}/.nix-channels /root/.nix-channels
 ln -s /nix/var/nix/profiles/default /root/.nix-profile
 
 # Setup rcs and profiles to source nix script
-snippet='
+snippet=' 
 if [ "${PATH#*$HOME/.nix-profile/bin}" = "${PATH}" ]; then if [ -z "$USER" ]; then USER=$(whoami); fi; . /nix/var/nix/profiles/default/etc/profile.d/nix.sh; fi
 '
 update_rc_file /etc/bash.bashrc "${snippet}"
