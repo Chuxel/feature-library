@@ -16,5 +16,5 @@
         "ghcr.io/devcontainers/features/docker-in-docker:1": {}
     },
     "postCreateCommand": "npm install -g @devcontainers/cli",
-    "remoteUser": "vscode"
+    "remoteUser": "node"
 }   
