@@ -12,7 +12,7 @@
         "packages": {
             "type": "string",
             "default": "",
-            "description": "Optional comma separated list of packages to install."
+            "description": "Optional space separated list of packages to install."
         }
     },
     "containerEnv": {

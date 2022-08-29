@@ -63,7 +63,7 @@ su ${USERNAME} -c "$(cat << EOF
 
     . /home/${USERNAME}/.nix-profile/etc/profile.d/nix.sh
     if [ ! -z "${PACKAGES}" ] && [ "${PACKAGES}" != "none" ]; then
-        nix-env --install ${PACKAGES//,/ }
+        nix-env --install ${PACKAGES}
     fi
     nix-collect-garbage --delete-old
     nix-store --optimise
