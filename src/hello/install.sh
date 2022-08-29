@@ -2,7 +2,7 @@
 
 echo "Activating feature 'hello'"
 
-GREETING=${GREETING:-undefined}
+GREETING="${GREETING:-undefined}"
 echo "The provided greeting is: $GREETING"
 
 tee /usr/hello.sh > /dev/null \

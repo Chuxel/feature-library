@@ -1,0 +1,18 @@
+{
+    "id": "postgres",
+    "version": "0.0.1",
+    "name": "PostgreSQL",
+    "options": {
+        "version": {
+            "type": "string",
+            "proposals": ["latest"],
+            "default": "latest",
+            "description": "Version of PostgreSQL to install."
+        },
+        "clientOnly": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to only install the PostgreSQL client."
+        }
+    }
+}

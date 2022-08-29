@@ -5,18 +5,16 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-FEATURE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FEATURE_ID="$(basename "${FEATURE_PATH}")"
-
 # Import common utils
-. "${FEATURE_PATH}/../../common/utils.sh"
+. ./utils.sh
 
-set_var_to_option_value "${FEATURE_ID}" version version "latest"
-set_var_to_option_value "${FEATURE_ID}" clientonly client_only "true"
+check_command curl curl ca-certificates
+check_command gpg gnupg2
+check_command dirmngr dirmngr
+check_packages apt-transport-https
 
 pgpkg_name="postgresql"
-if [ "${client_only}" = "true" ]; then
+if [ "${CLIENTONLY}" = "true" ]; then
     if type psql >/dev/null 2>&1; then
         echo "PostgreSQL client is already installed. Skipping."
         exit 0
@@ -28,7 +26,7 @@ else
         exit 0
     fi
 fi
-if [ "${version}" != "latest" ]; then
+if [ "${VERSION}" != "latest" ]; then
     apt_cache_version_soft_match version "${pgpkg_name}"
     pgpkg_name="${pgpkg_name}=${version}"
 fi
