@@ -1,5 +1,5 @@
 {
-    "id": "packcli",
+    "id": "pack-cli",
     "version": "0.0.1",
     "name": "Cloud Native Buildpack CLI",
     "options": {
