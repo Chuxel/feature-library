@@ -1,4 +1,6 @@
 #!/bin/bash
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 set -e
 if [ "$(id -u)" -ne 0 ]; then
     echo -e 'Script must be run as root.'

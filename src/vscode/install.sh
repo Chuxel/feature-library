@@ -1,5 +1,4 @@
 #!/bin/bash
-# Move to the same directory as this script
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 set -e
