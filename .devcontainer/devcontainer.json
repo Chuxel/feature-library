@@ -1,5 +1,8 @@
 {
-    "image": "mcr.microsoft.com/vscode/devcontainers/javascript-node:0-18",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "cacheFrom": "ghcr.io/chuxel/feature-library/images/repo-devcontainer-cache:latest"
+    },
     "customizations": {
         "vscode": {
             "extensions": [
@@ -15,6 +18,5 @@
     "features": {
         "ghcr.io/devcontainers/features/docker-in-docker:1": {}
     },
-    "postCreateCommand": "npm install -g @devcontainers/cli",
     "remoteUser": "node"
 }   
