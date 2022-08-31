@@ -1,6 +1,6 @@
 {
     "id": "nix",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "name": "Nix Package Manager",
     "options": {
         "version": {
@@ -13,6 +13,11 @@
             "type": "string",
             "default": "",
             "description": "Optional space separated list of packages to install."
+        },
+        "startDaemon": {
+            "type": "boolean",
+            "default": true,
+            "description": "Attempts to start nix-daemon on container start up to adapt to non-root user UID changes."
         }
     },
     "containerEnv": {
