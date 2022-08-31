@@ -29,7 +29,9 @@ jobs:
       - name: Build image
         uses: devcontainers/ci@v0.2
         with:
-          imageName: ghcr.io/chuxel/feature-library/images/repo-devcontainer-cache:latest
+          imageName: ghcr.io/chuxel/feature-library/images/repo-devcontainer-cache
+          imageTag: latest
           push: always
+          skipContainerUserIdUpdate: true
 
  
