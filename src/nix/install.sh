@@ -7,10 +7,12 @@ set -e
 # Option defaults
 VERSION="${VERSION:-"latest"}"
 PACKAGES="${PACKAGES:-""}"
+DERIVATIONPATH="${DERIVATIONPATH:-""}"
+FLAKEURI="${FLAKEURI:-""}"
 STARTDAEMON="${STARTDAEMON:-"true"}"
 USERNAME="${USERNAME:-"automatic"}"
 
-# Nix keys for securly verifying installer download signature
+# Nix keys for securly verifying installer download signature per https://nixos.org/download.html#nix-verify-installation
 NIX_GPG_KEYS="B541D55301270E0BCF15CA5D8170B4726D7198DE"
 GPG_KEY_SERVERS="keyserver hkp://keyserver.ubuntu.com:80
 keyserver hkps://keys.openpgp.org
@@ -53,44 +55,41 @@ fi
 # and https://nixos.org/manual/nix/stable/installation/multi-user.html#restricting-access
 groupadd --system -r nix-users
 # Create nix dir per https://nixos.org/manual/nix/stable/installation/installing-binary.html#single-user-installation
-mkdir /nix
-chown ${USERNAME} /nix 
+mkdir /nix /etc/nix
+chown ${USERNAME} /nix
+# Set nix config
+echo 'sandbox = false' > /etc/nix/nix.conf
+if [ "${FLAKEURI}" != "" ]; then
+    echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
+fi
 # Create temp dir owned by the non-root user
-orig_cwd="$(pwd)"
+feature_dir="$(pwd)"
 tmpdir="$(su ${USERNAME} -c 'mktemp -d')"
 cd "${tmpdir}"
+
 # Download and verify install per https://nixos.org/download.html#nix-verify-installation
 receive_gpg_keys NIX_GPG_KEYS
+echo "(*) Downloading Nix installer..."
+set +e
 curl -sSLf -o ./install-nix https://releases.nixos.org/nix/nix-${VERSION}/install
+exit_code=$?
+set -e
+if [ "$exit_code" != "0" ]; then
+    # Handle situation where git tags are ahead of what was is available to actually download
+    echo "(!) Nix version ${VERSION} failed to download. Attempting to fall back one version to retry..."
+    find_prev_version_from_git_tags VERSION https://github.com/NixOS/nix "tags/"
+    curl -sSLf -o ./install-nix https://releases.nixos.org/nix/nix-${VERSION}/install
+fi
 curl -sSLf -o ./install-nix.asc https://releases.nixos.org/nix/nix-${VERSION}/install.asc
 gpg2 --verify ./install-nix.asc
-# Perform single-user install since multi-user fails w/o systemd.
+
+# Perform single-user install since multi-user daemon has to run as root, and this is not always possible
 original_group="$(id -g "${USERNAME}")"
 usermod -g nix-users "${USERNAME}"
-su ${USERNAME} -c "$(cat << EOF 
-    set -e
-    sh ./install-nix --no-daemon --no-modify-profile
-
-    # Execute installation steps as non-root user so privs are correct if daemon not used
-    . /home/${USERNAME}/.nix-profile/etc/profile.d/nix.sh
-    if [ ! -z "${PACKAGES}" ] && [ "${PACKAGES}" != "none" ]; then
-        nix-env --install ${PACKAGES}
-    fi
-
-    nix-collect-garbage --delete-old
-    nix-store --optimise
-EOF
-)"
+su ${USERNAME} -c "${feature_dir}/install-as-user.sh ${tmpdir}"
 usermod -a -G nix-users -g "${original_group}" "${USERNAME}"
-# Clean up
-cd "${orig_cwd}"
-rm -rf "${tmpdir}"
-
-# Set nix config
-mkdir -p /etc/nix
-cat << EOF >> /etc/nix/nix.conf
-sandbox = false
-EOF
+cd "${feature_dir}"
+rm -rf "${tmpdir}" "/tmp/tmp-gnupg"
 
 # Setup nixbld group, set socket security so we can use w/daemon if preferred - As dscribed in
 # https://nixos.org/manual/nix/stable/installation/installing-binary.html#multi-user-installation 
@@ -111,12 +110,13 @@ chmod ug=rwx,o= /nix/var/nix/daemon-socket
 
 # Setup default (root) profile, channel - use real profile path so next derivation created makes the profiles unique
 ln -s "$(realpath /nix/var/nix/profiles/per-user/${USERNAME}/profile)" /nix/var/nix/profiles/default
-cp -R /home/${USERNAME}/.nix-channels /home/${USERNAME}/.nix-defexpr /root/
+mkdir -p /root/.nix-defexpr
+ln -s /nix/var/nix/profiles/per-user/root/channels /root/.nix-defexpr/channels
 ln -s /nix/var/nix/profiles/default /root/.nix-profile
 
 # Setup rcs and profiles to source nix script - default path is set automatically by feature, so just need profile specific one
 snippet='
-if [ "${PATH#*$HOME/.nix-profile/bin}" = "${PATH}" ]; then if [ -z "$USER" ]; then USER=$(whoami); fi; . $HOME/.nix-profile/etc/profile.d/nix.sh; fi
+if [ "${PATH#*$HOME/.nix-profile/bin}" = "${PATH}" ]; then if [ -z "$USER" ]; then USER=$(whoami); fi; . $HOME/.nix-profile/etc/profile.d/nix*.sh; fi
 '
 update_rc_file /etc/bash.bashrc "${snippet}"
 update_rc_file /etc/zsh/zshenv "${snippet}"
@@ -128,25 +128,10 @@ chmod +x /etc/profile.d/nix.sh
 # ensure bind mounts have proper permissions on Linux, but is otherwise optional in this case.
 echo "Setting up entrypoint..."
 if [ "${STARTDAEMON}" = "true" ]; then
-cat << 'EOF' > /usr/local/share/nix-init.sh
-#!/bin/bash
-# Attempt to start daemon, but don't bomb if it fails - we'll assume single user mode then
-set +e 
-if ! pidof nix-daemon > /dev/null 2>&1; then
-    if [ "$(id -u)" = "0" ]; then
-        ( /nix/var/nix/profiles/default/bin/nix-daemon > /tmp/nix-daemon.log 2>&1 ) &
-    elif type sudo > /dev/null 2>&1; then
-        ( sudo -n /nix/var/nix/profiles/default/bin/nix-daemon > /tmp/nix-daemon.log 2>&1 ) &
-    fi
-fi
-exec "$@"
-EOF
+    cp -f nix-entrypoint.sh /usr/local/share/
 else
-cat << 'EOF' > /usr/local/share/nix-init.sh
-#!/bin/bash
-exec "$@"
-EOF
+    echo -e '#!/bin/bash\nexec "$@"' > /usr/local/share/nix-entrypoint.sh
 fi
-chmod +x /usr/local/share/nix-init.sh
+chmod +x /usr/local/share/nix-entrypoint.sh
 
 echo "Done!"
