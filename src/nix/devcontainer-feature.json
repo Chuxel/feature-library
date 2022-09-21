@@ -1,6 +1,6 @@
 {
     "id": "nix",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "name": "Nix Package Manager",
     "options": {
         "version": {
@@ -9,19 +9,29 @@
             "default": "latest",
             "description": "Version of Nix to install."
         },
+        "multiUser": {
+            "type": "boolean",
+            "default": true,
+            "description": "Specifies whether multi-user daemon should be set up, or a single user install is used instead."
+        },
         "packages": {
             "type": "string",
             "default": "",
-            "description": "Optional space separated list of packages to install."
+            "description": "Optional space separated list of Nix packages to install in profile."
         },
-        "startDaemon": {
-            "type": "boolean",
-            "default": true,
-            "description": "Attempts to start nix-daemon on container start up to adapt to non-root user UID changes."
+        "flakeUri": {
+            "type": "string",
+            "default": "",
+            "description": "Optional URI to a Nix flake to install in profile."
+        },
+        "derivationPath": {
+            "type": "string",
+            "default": "",
+            "description": "Optional path in the base image to a Nix derivation to install in the profile."
         }
     },
     "containerEnv": {
         "PATH": "/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:${PATH}"
     },
-    "entrypoint": "/usr/local/share/nix-init.sh"
+    "entrypoint": "/usr/local/share/nix-entrypoint.sh"
 }

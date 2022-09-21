@@ -1,11 +1,6 @@
 #!/bin/bash
 set -e
-
-# Perform single-user install since daemon has to run as root, and this is not always possible
-sh "$1/install-nix" --no-daemon --no-modify-profile
-
-# Execute installation steps as non-root user so privs are correct if daemon not used
-. $HOME/.nix-profile/etc/profile.d/nix.sh
+echo "(*) Executing post-installation steps..."
 
 # Install list of packages in profile if specified.
 if [ ! -z "${PACKAGES}" ] && [ "${PACKAGES}" != "none" ]; then
