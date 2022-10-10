@@ -26,7 +26,6 @@ echo "/nix UID is ${nix_uid}."
 check "nix-env" type nix-env
 check "install" nix-env --install vim
 check "vim_installed" type vim
-check "node_installed" node --version
 
 # Report result
 # If any of the checks above exited with a non-zero exit code, the test will fail.

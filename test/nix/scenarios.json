@@ -1,9 +1,34 @@
 {
-    "install-packages": {
+    "single-user-install": {
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+        "remoteUser": "node",
+        "features": {
+            "nix": {
+                "multiUser": false
+            }
+        }
+    },
+    "multi-user-install": {
         "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
         "features": {
             "nix": {
-                "packageList": "nodejs"
+                "multiUser": true
+            }
+        }
+    },
+    "packages": {
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+        "features": {
+            "nix": {
+                "packageList": "nodejs vim yarn"
+            }
+        }
+    },
+    "flake": {
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+        "features": {
+            "nix": {
+                "flakeUri": "https://raw.githubusercontent.com/NixOS/nix.dev/master/flake.nix"
             }
         }
     }
