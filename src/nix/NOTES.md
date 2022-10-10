@@ -1,0 +1,18 @@
+## Multi-user vs single-user installs
+
+This Dev Container Feature supports two installation models for Nix: multi-user and single user. Multi-user is the default, but each has pros and cons.
+
+| Installation Model | Pros | Cons |
+| --- | --- | --- |
+| *Multi-User* | Nix can be used with any user including root.<br /><br />Also still works if the UID or GID of any user is updated. | Container must run either: run as root (but `remoteUser` in devcontainer.json can be non-root), or includes `sudo` with the `remoteUser` being configured to use it. <br /><br />Note that automated start of the `nix-daemon` requires passwordless `sudo` if the container is not running as root. Manual startup using `sudo` can require a password, however. |
+| *Single-User* | Does not require the container to run as root or `sudo` to be included in the image. | Only works with the user specified in the `userName` property or an auto-detected user. If this user's UID/GID is updated, that user will no longer be able to work with Nix. This is primarily a consideration when running on Linux where the UID/GID is sync'd to the local user. |
+
+### Manually starting the Nix daemon
+
+If you have `sudo` in your base image, but have a password set so automatic startup is not possible, you can manually start the Nix daemon by running the following command in a terminal:
+
+```bash
+sudo /usr/local/share/nix-entrypoint.sh
+```
+
+This same command can be used to restart the daemon if it has stopped for some reason. Logs are available at `/tmp/nix-daemon.log`.
