@@ -30,6 +30,9 @@
             "description": "Optional path in the base image to a Nix derivation to install in the profile."
         }
     },
+    "installsAfter": [
+        "ghcr.io/devcontainers/features/common-utils"
+    ],
     "containerEnv": {
         "PATH": "/nix/var/nix/profiles/default/bin:/nix/var/nix/profiles/default/sbin:${PATH}"
     },
