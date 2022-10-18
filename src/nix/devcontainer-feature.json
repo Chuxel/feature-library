@@ -12,7 +12,7 @@
         "multiUser": {
             "type": "boolean",
             "default": true,
-            "description": "Specifies whether multi-user daemon should be set up, or a single user install is used instead."
+            "description": "Perform a multi-user install (instead of single user)"
         },
         "packages": {
             "type": "string",
@@ -22,7 +22,7 @@
         "flakeUri": {
             "type": "string",
             "default": "",
-            "description": "Optional URI to a Nix flake to install in profile."
+            "description": "Optional URI to a Nix Flake to install in profile."
         },
         "derivationPath": {
             "type": "string",

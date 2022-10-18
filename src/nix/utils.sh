@@ -53,7 +53,7 @@ install_packages() {
         apt_get_update_if_needed
         apt-get -y install --no-install-recommends $1
     elif type apk > /dev/null 2>&1; then
-        apk add -y $2
+        apk add $2
     elif type dnf > /dev/null 2>&1; then
         dnf install -y $3
     elif type yum > /dev/null 2>&1; then
