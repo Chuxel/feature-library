@@ -28,7 +28,7 @@ if [ "${VSCODEEDITION}" != "insiders" ] && [ ! -e /usr/local/code ]; then
     to_install="code"
 fi
 
-if [ "${VSCODEEDITION}" != "stable" ]&& [ ! -e /usr/local/code-insiders ]; ; then
+if [ "${VSCODEEDITION}" != "stable" ]&& [ ! -e /usr/local/code-insiders ]; then
     to_install="${to_install} code-insiders"
 fi
 apt-get -y install ${to_install}
