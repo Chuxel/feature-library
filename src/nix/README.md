@@ -1,0 +1,1 @@
+Moved to https://github.com/devcontainers/features/tree/main/src/nix
